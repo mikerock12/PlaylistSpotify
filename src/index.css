@@ -516,6 +516,82 @@ a {
   transform: translateY(-1px);
 }
 
+/* Global Artist / Setlist Box */
+.global-artist-box {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.1rem;
+  transition: var(--transition);
+}
+
+.global-artist-box:focus-within {
+  border-color: var(--spotify-green);
+  box-shadow: 0 0 16px var(--spotify-green-glow);
+}
+
+.global-artist-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.global-artist-icon {
+  color: var(--spotify-green);
+}
+
+.global-artist-header em {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.global-artist-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.global-artist-input {
+  flex: 1;
+  min-width: 260px;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.9rem;
+  color: #fff;
+  outline: none;
+  transition: var(--transition);
+}
+
+.global-artist-input:focus {
+  border-color: var(--spotify-green);
+}
+
+.detected-artist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--spotify-green-subtle);
+  border: 1px solid var(--spotify-green);
+  color: var(--spotify-green);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.detected-artist-chip:hover {
+  background: var(--spotify-green);
+  color: #000;
+}
+
 /* Form Settings */
 .form-settings-bar {
   display: flex;
@@ -1526,6 +1602,41 @@ a {
 
 .search-input-field input:focus {
   border-color: var(--spotify-green);
+}
+
+.modal-search-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.quick-search-helpers {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quick-helper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.quick-helper-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
 }
 
 .modal-notice {

@@ -286,8 +286,12 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     <div className="not-found-box">
                       <XCircle size={20} className="not-found-icon" />
                       <div className="not-found-text">
-                        <strong>Faixa não localizada automaticamente</strong>
-                        <p>Clique em "Buscar Opções" para ajustar o nome da banda ou música.</p>
+                        <strong>{item.errorMsg || 'Faixa não localizada automaticamente'}</strong>
+                        <p>
+                          {item.artistQuery
+                            ? `Buscado por: "${item.titleQuery}" • Artista: "${item.artistQuery}"`
+                            : `Buscado apenas por título: "${item.titleQuery}" (adicione a banda para maior precisão)`}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -309,10 +313,10 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                     </div>
                   )}
 
-                  {item.status === 'not_found' && (
-                    <div className="status-pill not-found-pill">
+                  {(item.status === 'not_found' || item.status === 'error') && (
+                    <div className="status-pill not-found-pill" title={item.errorMsg || 'Não encontrada'}>
                       <XCircle size={13} />
-                      <span>Não Encontrada</span>
+                      <span>{item.status === 'error' ? 'Erro na Busca' : 'Não Encontrada'}</span>
                     </div>
                   )}
 

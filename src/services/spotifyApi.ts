@@ -5,6 +5,7 @@ import type {
   MatchConfidence,
   PlaylistCreationResult,
 } from '../types/spotify';
+import { getValidAccessToken } from './auth';
 
 const BASE_URL = 'https://api.spotify.com/v1';
 
@@ -62,6 +63,15 @@ export interface SearchTrackResult {
   errorMsg?: string;
 }
 
+function cleanTitleForFallback(title: string): string {
+  return title
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\b(feat|ft|featuring)\.?\s+.*$/i, '')
+    .replace(/[-–—:|/]+.*$/, '')
+    .trim();
+}
+
 export async function searchTrackWithSmartPopularity(
   token: string,
   artistQuery: string,
@@ -74,33 +84,86 @@ export async function searchTrackWithSmartPopularity(
     const cleanArtist = artistQuery.trim();
     const cleanTitle = titleQuery.trim();
 
-    // 1. Tentar busca direcionada: track + artist
-    if (cleanArtist && cleanTitle) {
-      const q = `track:"${cleanTitle.replace(/"/g, '')}" artist:"${cleanArtist.replace(/"/g, '')}"`;
-      const url = `${BASE_URL}/search?q=${encodeURIComponent(q)}&type=track&limit=${limit}`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    if (!cleanTitle && !cleanArtist) {
+      return {
+        bestMatch: null,
+        candidates: [],
+        status: 'not_found',
+        confidence: 'low',
+        errorMsg: 'Nenhum termo de busca fornecido.',
+      };
+    }
 
-      if (res.ok) {
-        const data = await res.json();
-        tracks = data.tracks?.items || [];
+    let activeToken = token;
+    const safeLimit = Math.min(Math.max(limit || 10, 1), 10);
+
+    const executeSearch = async (query: string): Promise<SpotifyTrack[]> => {
+      if (!query.trim()) return [];
+
+      const doFetch = async (tok: string) => {
+        const url = `${BASE_URL}/search?q=${encodeURIComponent(query.trim())}&type=track&limit=${safeLimit}`;
+        return fetch(url, {
+          headers: { Authorization: `Bearer ${tok}` },
+        });
+      };
+
+      let res = await doFetch(activeToken);
+
+      if (res.status === 401) {
+        // Tenta renovar token
+        const fresh = await getValidAccessToken();
+        if (fresh && fresh !== activeToken) {
+          activeToken = fresh;
+          res = await doFetch(activeToken);
+        }
+      }
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Sessão expirada. Por favor, desconecte e reconecte sua conta do Spotify no topo direito.');
+        }
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `Erro ${res.status} ao consultar Spotify.`);
+      }
+
+      const data = await res.json();
+      return data.tracks?.items || [];
+    };
+
+    // 1. Busca direcionada: track + artist
+    if (cleanArtist && cleanTitle) {
+      const q = `track:"${cleanTitle.replace(/["']/g, '')}" artist:"${cleanArtist.replace(/["']/g, '')}"`;
+      tracks = await executeSearch(q);
+    }
+
+    // 2. Busca exata combinada com aspas
+    if (tracks.length === 0 && cleanArtist && cleanTitle) {
+      const q = `"${cleanArtist.replace(/"/g, '')}" "${cleanTitle.replace(/"/g, '')}"`;
+      tracks = await executeSearch(q);
+    }
+
+    // 3. Busca ampla combinada
+    if (tracks.length === 0) {
+      const combined = `${cleanArtist} ${cleanTitle}`.trim();
+      if (combined) {
+        tracks = await executeSearch(combined);
       }
     }
 
-    // 2. Se não encontrou resultados, tentar busca ampla combinada
-    if (tracks.length === 0) {
-      const combinedQuery = `${cleanArtist} ${cleanTitle}`.trim();
-      if (combinedQuery) {
-        const url = `${BASE_URL}/search?q=${encodeURIComponent(combinedQuery)}&type=track&limit=${limit}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+    // 4. Fallback: Limpeza de sufixos (ex: "(Live)", "(Ao Vivo)", "feat.", etc.)
+    if (tracks.length === 0 && cleanTitle) {
+      const sanitizedTitle = cleanTitleForFallback(cleanTitle);
+      if (sanitizedTitle && sanitizedTitle !== cleanTitle) {
+        const queryWithSanitized = cleanArtist ? `${cleanArtist} ${sanitizedTitle}` : sanitizedTitle;
+        tracks = await executeSearch(queryWithSanitized);
+      }
+    }
 
-        if (res.ok) {
-          const data = await res.json();
-          tracks = data.tracks?.items || [];
-        }
+    // 5. Fallback final: apenas o título da faixa
+    if (tracks.length === 0 && cleanTitle) {
+      tracks = await executeSearch(`track:"${cleanTitle.replace(/["']/g, '')}"`);
+      if (tracks.length === 0) {
+        tracks = await executeSearch(cleanTitle);
       }
     }
 
@@ -110,11 +173,11 @@ export async function searchTrackWithSmartPopularity(
         candidates: [],
         status: 'not_found',
         confidence: 'low',
-        errorMsg: 'Nenhum resultado encontrado no catálogo do Spotify.',
+        errorMsg: `Nenhum resultado encontrado no Spotify para "${cleanTitle}"${cleanArtist ? ` (${cleanArtist})` : ''}.`,
       };
     }
 
-    // 3. Ranqueamento e Avaliação de Candidatos
+    // 6. Ranqueamento e Avaliação de Candidatos
     const scoredCandidates = tracks.map((track) => {
       const trackArtists = track.artists.map((a) => a.name).join(' ');
       const artistSim = cleanArtist ? calculateSimilarity(cleanArtist, trackArtists) : 0.8;
@@ -124,7 +187,7 @@ export async function searchTrackWithSmartPopularity(
       const normArtist = normalizeText(trackArtists);
       let penalty = 0;
       if (normTrackName.includes('tribute') || normTrackName.includes('karaoke') || normTrackName.includes('instrumental version')) {
-        penalty += 0.3;
+        penalty += 0.35;
       }
       if (normArtist.includes('tribute') || normArtist.includes('cover') || normArtist.includes('karaoke')) {
         penalty += 0.5;

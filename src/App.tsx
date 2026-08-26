@@ -37,6 +37,7 @@ export const App: React.FC = () => {
 
   // Input & parsed data
   const [inputText, setInputText] = useState<string>('');
+  const [customArtist, setCustomArtist] = useState<string>('');
   const [parsedSongs, setParsedSongs] = useState<ParsedSong[]>([]);
 
   // Search execution state
@@ -105,9 +106,17 @@ export const App: React.FC = () => {
 
   // Executa busca em lote com limitação de concorrência
   const runBatchSearch = useCallback(
-    async (songs: ParsedSong[], currentToken: string) => {
+    async (songs: ParsedSong[], currentToken?: string) => {
       setIsSearchingBatch(true);
       setSearchProgress({ current: 0, total: songs.length });
+
+      const activeToken = (await getValidAccessToken()) || currentToken || token;
+      if (!activeToken) {
+        setIsSearchingBatch(false);
+        setGlobalError('Sessão expirada. Por favor, desconecte e reconecte sua conta do Spotify no topo direito.');
+        return;
+      }
+      setToken(activeToken);
 
       const updatedList = [...songs];
       const CONCURRENCY = 3;
@@ -117,7 +126,7 @@ export const App: React.FC = () => {
         await Promise.all(
           chunk.map(async (song) => {
             const result = await searchTrackWithSmartPopularity(
-              currentToken,
+              activeToken,
               song.artistQuery,
               song.titleQuery
             );
@@ -138,30 +147,40 @@ export const App: React.FC = () => {
 
       setIsSearchingBatch(false);
     },
-    []
+    [token]
   );
 
-  const handleProcessList = async (rawText: string, format: ParseFormat) => {
+  const handleProcessList = async (rawText: string, format: ParseFormat, defaultArtist?: string) => {
     setInputText(rawText);
+    if (defaultArtist !== undefined) {
+      setCustomArtist(defaultArtist);
+    }
 
-    if (!token) {
+    const activeToken = (await getValidAccessToken()) || token;
+    if (!activeToken) {
       setIsConfigOpen(true);
       return;
     }
+    setToken(activeToken);
 
-    const parsed = parseSongList(rawText, format);
-    setParsedSongs(parsed);
+    const { songs, detectedArtist } = parseSongList(rawText, format, defaultArtist);
+    if (detectedArtist && !defaultArtist) {
+      setCustomArtist(detectedArtist);
+    }
+    setParsedSongs(songs);
     setCurrentStep('review');
 
-    await runBatchSearch(parsed, token);
+    await runBatchSearch(songs, activeToken);
   };
 
   const handleRetrySearchAll = async () => {
-    if (!token) {
+    const activeToken = (await getValidAccessToken()) || token;
+    if (!activeToken) {
       setIsConfigOpen(true);
       return;
     }
-    await runBatchSearch(parsedSongs, token);
+    setToken(activeToken);
+    await runBatchSearch(parsedSongs, activeToken);
   };
 
   const handleSelectTrack = (itemId: string, track: SpotifyTrack) => {
@@ -212,6 +231,7 @@ export const App: React.FC = () => {
 
   const handleResetAll = () => {
     setInputText('');
+    setCustomArtist('');
     setParsedSongs([]);
     setCurrentStep('input');
   };
@@ -247,6 +267,7 @@ export const App: React.FC = () => {
           {currentStep === 'input' && (
             <TextInputStep
               initialText={inputText}
+              initialArtist={customArtist}
               onProcessList={handleProcessList}
               isAuthenticated={!!token}
               onConnectClick={() => setIsConfigOpen(true)}

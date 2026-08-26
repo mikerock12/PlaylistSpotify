@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { SpotifyTrack, ParsedSong } from '../types/spotify';
-import { X, Search, Flame, Play, Pause, Check, Disc, Music, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Search, Flame, Play, Pause, Check, Disc, Music, AlertTriangle, ExternalLink, ArrowLeftRight, Eraser } from 'lucide-react';
 import { searchTrackWithSmartPopularity } from '../services/spotifyApi';
 
 interface TrackOptionModalProps {
@@ -22,17 +22,47 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
   const [searchTitle, setSearchTitle] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [candidates, setCandidates] = useState<SpotifyTrack[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const doSearch = React.useCallback(
+    async (artist: string, title: string) => {
+      if (!token) return;
+      setIsSearching(true);
+      setErrorMessage(null);
+      try {
+        const result = await searchTrackWithSmartPopularity(token, artist, title, 10);
+        setCandidates(result.candidates);
+        if (result.candidates.length === 0 && result.errorMsg) {
+          setErrorMessage(result.errorMsg);
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Erro ao consultar o Spotify.');
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [token]
+  );
+
   useEffect(() => {
-    if (item) {
+    if (item && isOpen) {
       setSearchArtist(item.artistQuery);
       setSearchTitle(item.titleQuery);
-      setCandidates(item.candidates || []);
       setPlayingTrackId(null);
+      setErrorMessage(null);
+
+      if (item.candidates && item.candidates.length > 0) {
+        setCandidates(item.candidates);
+      } else if (token && (item.titleQuery || item.artistQuery)) {
+        // Busca automática se ainda não tem candidatos
+        doSearch(item.artistQuery, item.titleQuery);
+      } else {
+        setCandidates([]);
+      }
     }
-  }, [item]);
+  }, [item, isOpen, token, doSearch]);
 
   useEffect(() => {
     return () => {
@@ -44,18 +74,22 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
 
   if (!isOpen || !item) return null;
 
-  const handleManualSearch = async (e: React.FormEvent) => {
+  const handleManualSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
-    setIsSearching(true);
-    try {
-      const result = await searchTrackWithSmartPopularity(token, searchArtist, searchTitle, 15);
-      setCandidates(result.candidates);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSearching(false);
-    }
+    doSearch(searchArtist, searchTitle);
+  };
+
+  const handleSwap = () => {
+    const newArtist = searchTitle;
+    const newTitle = searchArtist;
+    setSearchArtist(newArtist);
+    setSearchTitle(newTitle);
+    doSearch(newArtist, newTitle);
+  };
+
+  const handleSearchTitleOnly = () => {
+    setSearchArtist('');
+    doSearch('', searchTitle);
   };
 
   const handleTogglePlay = (track: SpotifyTrack) => {
@@ -119,32 +153,58 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
           <form onSubmit={handleManualSearch} className="modal-search-bar">
             <div className="search-inputs-grid">
               <div className="search-input-field">
-                <label>Artista:</label>
+                <label>Artista / Banda:</label>
                 <input
                   type="text"
                   value={searchArtist}
                   onChange={(e) => setSearchArtist(e.target.value)}
-                  placeholder="Nome da Banda/Artista"
+                  placeholder="Ex: Red Hot Chili Peppers"
                 />
               </div>
               <div className="search-input-field">
-                <label>Música:</label>
+                <label>Título da Música:</label>
                 <input
                   type="text"
                   value={searchTitle}
                   onChange={(e) => setSearchTitle(e.target.value)}
-                  placeholder="Título da Música"
+                  placeholder="Ex: Look Around"
                 />
               </div>
             </div>
-            <button
-              type="submit"
-              className="btn secondary-btn search-action-btn"
-              disabled={isSearching}
-            >
-              <Search size={16} />
-              <span>{isSearching ? 'Buscando...' : 'Rebuscar no Spotify'}</span>
-            </button>
+
+            <div className="modal-search-actions-row">
+              <div className="quick-search-helpers">
+                <button
+                  type="button"
+                  className="quick-helper-btn"
+                  onClick={handleSwap}
+                  title="Inverter Artista e Música"
+                >
+                  <ArrowLeftRight size={13} />
+                  <span>Inverter</span>
+                </button>
+                {searchArtist && (
+                  <button
+                    type="button"
+                    className="quick-helper-btn"
+                    onClick={handleSearchTitleOnly}
+                    title="Remover filtro de artista e buscar só pelo título"
+                  >
+                    <Eraser size={13} />
+                    <span>Buscar só por Título</span>
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="btn secondary-btn search-action-btn"
+                disabled={isSearching}
+              >
+                <Search size={16} />
+                <span>{isSearching ? 'Buscando...' : 'Rebuscar no Spotify'}</span>
+              </button>
+            </div>
           </form>
 
           {/* Divergence note */}
@@ -157,10 +217,15 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
 
           {/* Results list */}
           <div className="candidates-list">
-            {candidates.length === 0 ? (
+            {isSearching ? (
+              <div className="empty-candidates">
+                <Music size={32} className="spin-icon" />
+                <p>Consultando catálogo do Spotify...</p>
+              </div>
+            ) : candidates.length === 0 ? (
               <div className="empty-candidates">
                 <Music size={32} />
-                <p>Nenhuma versão encontrada com os termos acima.</p>
+                <p>{errorMessage || 'Nenhuma versão encontrada com os termos acima.'}</p>
                 <span>Tente ajustar o nome da banda ou da música na busca acima.</span>
               </div>
             ) : (
@@ -276,3 +341,4 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
     </div>
   );
 };
+

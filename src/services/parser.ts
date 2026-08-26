@@ -12,10 +12,141 @@ export function cleanString(str: string): string {
 }
 
 /**
- * Remove números de faixas no início (ex: "01. ", "1 - ", "12) ")
+ * Remove minutagens / timestamps (ex: "0:47", "17:57", "01:15:30", "[17:57]", "(17:57)")
+ * e números de faixas no início ou fim da linha.
+ */
+export function stripTimestampsAndTrackNumbers(str: string): { cleaned: string; hasTimestamp: boolean } {
+  let s = str.trim();
+  let hasTimestamp = false;
+
+  // 1. Remove números de faixas no início (ex: "01. ", "1 - ", "12) ")
+  // CUIDADO: \d+:(?!\d) só remove dois pontos se NÃO for seguido de dígitos de minutagem!
+  s = s.replace(/^\s*(?:\d+[.)-]|\(\d+\)|\[\d+\]|\d+:(?!\d))\s*/, '').trim();
+
+  // 2. Remove timestamp no início (ex: "0:47", "17:57", "1:15:30", "[17:57]", "(17:57)", "【17:57】")
+  const leadingTimestampRegex = /^\s*(?:\[|\(|【)?\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:\]|\)|】)?\s*[-–—:|.]*\s*/;
+  if (leadingTimestampRegex.test(s)) {
+    hasTimestamp = true;
+    s = s.replace(leadingTimestampRegex, '').trim();
+  }
+
+  // 3. Remove número de faixa se colocado após o timestamp (ex: "0:47 - 1. Monarchy of Roses")
+  s = s.replace(/^\s*(?:\d+[.)-]|\(\d+\)|\[\d+\]|\d+:(?!\d))\s*/, '').trim();
+
+  // 4. Remove timestamp no fim da linha (ex: "Look Around 17:57", "Look Around (17:57)", "Look Around [17:57]")
+  const trailingTimestampRegex = /\s*(?:[-–—:|.]*\s*)?(?:\[|\(|【)?\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:\]|\)|】)?\s*$/;
+  if (trailingTimestampRegex.test(s)) {
+    hasTimestamp = true;
+    s = s.replace(trailingTimestampRegex, '').trim();
+  }
+
+  // 5. Remove caracteres de lista soltos no início ou fim
+  s = s.replace(/^[\s-–—•*~|]+/, '').replace(/[\s-–—•*~|]+$/, '').trim();
+
+  return { cleaned: s, hasTimestamp };
+}
+
+/**
+ * Remove números de faixas no início
  */
 export function stripTrackNumber(str: string): string {
-  return str.replace(/^\s*(\d+[\.\-\)\:]|\(\d+\)|\[\d+\])\s*/, '').trim();
+  return stripTimestampsAndTrackNumbers(str).cleaned;
+}
+
+/**
+ * Verifica se a linha é um cabeçalho/metadado a ser ignorado (ex: "Setlist:", visualizações, etc.)
+ */
+export function isIgnoredHeaderLine(line: string): boolean {
+  const norm = cleanString(line).toLowerCase();
+  if (!norm) return true;
+
+  // Linhas típicas de cabeçalho de setlist
+  if (/^(set\s*list|track\s*list|playlist|faixas|músicas|musicas|songs|tracks)(\s*[:-–—].*)?$/i.test(norm)) {
+    return true;
+  }
+
+  // Informações de vídeo do YouTube (visualizações, data, inscrições)
+  if (/visualizaç(?:ão|ões)|views|inscritos|subscribers|inscrever-se|subscribe|inscreva-se/i.test(norm)) {
+    return true;
+  }
+
+  // Links HTTP
+  if (/^https?:\/\//i.test(norm)) {
+    return true;
+  }
+
+  // Linhas de créditos do vídeo ou filmes
+  if (/^(from the basement|the coda collection|the coda collection films|coda collection|official video|full concert|show completo|gravação ao vivo|gravacao ao vivo)/i.test(norm)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detecta se há uma banda/artista global no cabeçalho ou rodapé do texto
+ */
+export function detectGlobalArtist(rawLines: string[]): { detectedArtist: string | null; remainingLines: string[] } {
+  let detectedArtist: string | null = null;
+  const validLines: string[] = [];
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
+    if (!line) continue;
+
+    // Prefixo explícito: "Banda: Foo", "Artista: Bar", "Artist: Foo", "Band: Bar"
+    const explicitPrefixMatch = line.match(/^(?:banda|artista|artist|band)\s*[:-]\s*(.+)$/i);
+    if (explicitPrefixMatch && !detectedArtist) {
+      detectedArtist = cleanString(explicitPrefixMatch[1]);
+      continue;
+    }
+
+    // Linha de cabeçalho informativa a ser ignorada
+    if (isIgnoredHeaderLine(line)) {
+      continue;
+    }
+
+    // Título de show/vídeo do YouTube na primeira linha:
+    // ex: "Red Hot Chili Peppers - LIVE HD (From The Basement 2012)"
+    if (i === 0 && !detectedArtist) {
+      const showTitleMatch = line.match(/^([^-–—:]+)\s*[-–—:]\s*(?:LIVE|AO VIVO|SHOW|CONCERT|FULL ALBUM|FROM THE BASEMENT|TOUR|OFFICIAL|THE CODA).*/i);
+      if (showTitleMatch) {
+        detectedArtist = cleanString(showTitleMatch[1]);
+        continue;
+      }
+    }
+
+    validLines.push(line);
+  }
+
+  // Se ainda não detectou artista, verificar se a primeira ou a última linha é apenas o nome da banda
+  // (quando as outras linhas contêm minutagens ou estrutura de músicas)
+  if (!detectedArtist && validLines.length > 1) {
+    const otherLinesHaveTimestamps = validLines.some((l) => stripTimestampsAndTrackNumbers(l).hasTimestamp);
+
+    if (otherLinesHaveTimestamps) {
+      // Checar se a primeira linha é o nome da banda
+      const firstLine = validLines[0];
+      const { hasTimestamp: firstHasTs } = stripTimestampsAndTrackNumbers(firstLine);
+      if (!firstHasTs && !firstLine.includes(' - ') && firstLine.length < 50) {
+        detectedArtist = cleanString(firstLine);
+        validLines.shift();
+      } else {
+        // Checar se a última linha é o nome da banda
+        const lastLine = validLines[validLines.length - 1];
+        const { hasTimestamp: lastHasTs } = stripTimestampsAndTrackNumbers(lastLine);
+        if (!lastHasTs && !lastLine.includes(' - ') && lastLine.length < 50) {
+          detectedArtist = cleanString(lastLine);
+          validLines.pop();
+        }
+      }
+    }
+  }
+
+  return {
+    detectedArtist,
+    remainingLines: validLines,
+  };
 }
 
 export type ParseFormat = 'auto' | 'artist_song' | 'song_artist';
@@ -23,17 +154,26 @@ export type ParseFormat = 'auto' | 'artist_song' | 'song_artist';
 /**
  * Analisa o texto de entrada linha por linha e extrai Artista e Nome da Música
  */
-export function parseSongList(text: string, format: ParseFormat = 'auto'): ParsedSong[] {
-  const lines = text
+export function parseSongList(
+  text: string,
+  format: ParseFormat = 'auto',
+  defaultArtist?: string
+): { songs: ParsedSong[]; detectedArtist: string | null } {
+  const rawLines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  const results: ParsedSong[] = [];
+  const { detectedArtist, remainingLines } = detectGlobalArtist(rawLines);
+  const activeGlobalArtist = (defaultArtist?.trim() || detectedArtist || '').trim();
 
-  for (let index = 0; index < lines.length; index++) {
-    const rawLine = lines[index];
-    const cleanedLine = stripTrackNumber(rawLine);
+  const songs: ParsedSong[] = [];
+
+  for (let index = 0; index < remainingLines.length; index++) {
+    const rawLine = remainingLines[index];
+    const { cleaned: cleanedLine } = stripTimestampsAndTrackNumbers(rawLine);
+
+    if (!cleanedLine) continue;
 
     let artist = '';
     let title = '';
@@ -65,16 +205,17 @@ export function parseSongList(text: string, format: ParseFormat = 'auto'): Parse
       const parts = cleanedLine.split(',');
       artist = cleanString(parts[0]);
       title = cleanString(parts.slice(1).join(','));
-    } else if (cleanedLine.includes(':')) {
-      const parts = cleanedLine.split(':');
-      artist = cleanString(parts[0]);
-      title = cleanString(parts.slice(1).join(':'));
     } else {
       title = cleanedLine;
-      artist = '';
+      artist = activeGlobalArtist;
     }
 
-    results.push({
+    // Se o artista ainda estiver vazio mas tivermos um artista global, atribuir
+    if (!artist && activeGlobalArtist) {
+      artist = activeGlobalArtist;
+    }
+
+    songs.push({
       id: `song_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`,
       rawText: rawLine,
       artistQuery: artist,
@@ -85,5 +226,6 @@ export function parseSongList(text: string, format: ParseFormat = 'auto'): Parse
     });
   }
 
-  return results;
+  return { songs, detectedArtist };
 }
+
