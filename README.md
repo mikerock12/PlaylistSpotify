@@ -75,7 +75,38 @@ Um passo a passo dentro do próprio app explica como gerar o Client ID em 4 etap
 
 ![Modal Como Usar](docs/screenshots/04-como-usar.png)
 
-> As telas **2. Revisar Versões & Ambiguidade** e **3. Criar Playlist** exigem uma sessão autenticada do Spotify e por isso não estão nas capturas acima.
+### 5. Revisão: uma lista escolhida para falhar
+
+As capturas abaixo usam uma lista **deliberadamente hostil**. Cada linha existe para provocar um comportamento diferente do motor de busca — é mais honesto do que exibir seis acertos fáceis:
+
+| Entrada | O que testa | Resultado |
+|---|---|---|
+| `Nirvana - Smells Like Ten Spirit` | Erro de digitação no título | ✅ Encontra *Smells Like **Teen** Spirit* |
+| `Queen - Love of My Life` | Faixa com dezenas de versões ao vivo e remasterizações | ✅ Prende na gravação de estúdio de *A Night at the Opera* (1975) |
+| `zzqxwv nonexistent band - asdkjhasdkjh zxcvbnm` | Entrada sem correspondência possível | ⚠️ Não inventa acerto: devolve um palpite fraco e **marca como divergência** |
+| `Beatles - Yesterday` | Nome de artista incompleto (falta o *The*) | ✅ Casa com **The** Beatles mesmo assim |
+| `Karaoke Hits - Bohemian Rhapsody` | Karaokê **pedido de propósito** | ✅ Respeita o pedido, em vez de "corrigir" para o Queen |
+| `Metallica - Nothing Else Matters` | Linha limpa, como controle | ✅ Casa direto com a remasterização de 2021 |
+
+O terceiro caso é o mais revelador. O app poderia ter aceitado o palpite em silêncio — em vez disso, ele o separa em **Divergências**, para você decidir. Um acerto falso é pior que uma dúvida declarada.
+
+O quinto caso mostra a contrapartida do filtro anti-cover: ele **penaliza** karaokê no ranqueamento, mas não sobrepõe um pedido explícito. Se você escreveu `Karaoke Hits`, é karaokê que você recebe.
+
+![Revisão e seleção de versões](docs/screenshots/05-revisao-versoes.png)
+
+Cada faixa aprovada recebe o selo **Versão Oficial**; as duvidosas mostram quantas alternativas existem, e **Trocar Versão** abre as demais gravações.
+
+![Continuação da lista de revisão](docs/screenshots/06-revisao-continuacao.png)
+
+### 6. Detalhes da playlist
+
+Nome, descrição e visibilidade antes de enviar. A capa é montada com as artes dos álbuns das faixas selecionadas.
+
+![Detalhes da playlist](docs/screenshots/07-detalhes-playlist.png)
+
+### 7. Criada na conta
+
+![Playlist criada com sucesso](docs/screenshots/08-playlist-criada.png)
 
 ---
 
