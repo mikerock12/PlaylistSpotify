@@ -211,7 +211,7 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
           <div className="modal-notice">
             <AlertTriangle size={16} className="notice-icon" />
             <span>
-              Listamos as versões encontradas ordenadas por <strong>Popularidade (mais ouvidas)</strong> no Spotify. Escolha a versão desejada abaixo:
+              Listamos as versões encontradas, ordenadas pela <strong>melhor correspondência</strong> segundo a busca do Spotify. Escolha a versão desejada abaixo:
             </span>
           </div>
 

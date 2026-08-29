@@ -113,10 +113,10 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           <div className="feature-highlight-box">
             <div className="feature-highlight-header">
               <Sparkles className="feature-icon" size={18} />
-              <strong>Como funciona a busca pela versão mais ouvida?</strong>
+              <strong>Como o sistema escolhe a versão de cada faixa?</strong>
             </div>
             <p>
-              O sistema pesquisa no catálogo oficial do Spotify e analisa as métricas de <em>Popularity</em> (0 a 100). Ele descarta gravações de tributos e covers não oficiais e prioriza a versão original com maior número de streams. Caso haja regravações, álbuns ao vivo ou edições comemorativas muito próximas, o sistema marca como <em>Divergência / Ambiguidade</em> para que você possa escolher a versão exata com 1 clique!
+              O sistema pesquisa no catálogo oficial do Spotify e ranqueia os resultados por semelhança de artista e de título, descartando tributos, covers não oficiais e karaokê. Quando o Spotify fornece a métrica de <em>Popularity</em> (0 a 100), ela entra no cálculo para priorizar a gravação mais ouvida; sem ela, vale a ordem de relevância da própria busca. Caso haja regravações, álbuns ao vivo ou edições comemorativas muito próximas, a faixa é marcada como <em>Divergência / Ambiguidade</em> para que você escolha a versão exata com 1 clique!
             </p>
           </div>
         </div>

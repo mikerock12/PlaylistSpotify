@@ -114,7 +114,7 @@ export const TextInputStep: React.FC<TextInputStepProps> = ({
           <div>
             <h2>Cole ou Digite sua Lista de Músicas</h2>
             <p className="card-subtitle">
-              Insira músicas individuais ou <strong>setlists de shows do YouTube</strong> com minutagens (ex: <code>17:57 Look Around</code>). O sistema identifica a banda e busca as versões mais ouvidas no Spotify.
+              Insira músicas individuais ou <strong>setlists de shows do YouTube</strong> com minutagens (ex: <code>17:57 Look Around</code>). O sistema identifica a banda e busca a melhor correspondência no catálogo oficial do Spotify.
             </p>
           </div>
         </div>

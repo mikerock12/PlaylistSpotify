@@ -102,7 +102,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           <div>
             <h2>Revisão & Seleção de Versões</h2>
             <p className="card-subtitle">
-              Identificamos automaticamente a gravação oficial mais escutada para cada faixa. Se houver divergências de nomes ou versões, você pode ajustar com 1 clique.
+              Identificamos automaticamente a melhor correspondência oficial para cada faixa. Se houver divergências de nomes ou versões, você pode ajustar com 1 clique.
             </p>
           </div>
         </div>
@@ -126,7 +126,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
           <div className="progress-text-row">
             <span className="progress-title">
               <RefreshCw size={14} className="spin-icon" />
-              Analisando popularidade no catálogo do Spotify...
+              Consultando o catálogo do Spotify...
             </span>
             <span className="progress-count">
               {searchProgress.current} de {searchProgress.total} faixas
