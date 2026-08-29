@@ -72,6 +72,23 @@ function cleanTitleForFallback(title: string): string {
     .trim();
 }
 
+/**
+ * Verifica se dois resultados são a mesma gravação em lançamentos diferentes
+ * (ex: "Come as You Are" no Nevermind e no Nevermind (Remastered))
+ */
+function isSameRecording(a: SpotifyTrack, b: SpotifyTrack): boolean {
+  const titleA = normalizeText(cleanTitleForFallback(a.name));
+  const titleB = normalizeText(cleanTitleForFallback(b.name));
+  if (!titleA || !titleB) return false;
+
+  const sameTitle = titleA === titleB || titleA.includes(titleB) || titleB.includes(titleA);
+  if (!sameTitle) return false;
+
+  const artistA = normalizeText(a.artists.map((x) => x.name).join(' '));
+  const artistB = normalizeText(b.artists.map((x) => x.name).join(' '));
+  return artistA === artistB || artistA.includes(artistB) || artistB.includes(artistA);
+}
+
 export async function searchTrackWithSmartPopularity(
   token: string,
   artistQuery: string,
@@ -178,7 +195,11 @@ export async function searchTrackWithSmartPopularity(
     }
 
     // 6. Ranqueamento e Avaliação de Candidatos
-    const scoredCandidates = tracks.map((track) => {
+    // O Spotify omite `popularity` para apps sem acesso estendido. Quando isso
+    // acontece, o ranking passa a se apoiar só em similaridade + ordem nativa.
+    const hasPopularity = tracks.some((t) => typeof t.popularity === 'number');
+
+    const scoredCandidates = tracks.map((track, index) => {
       const trackArtists = track.artists.map((a) => a.name).join(' ');
       const artistSim = cleanArtist ? calculateSimilarity(cleanArtist, trackArtists) : 0.8;
       const titleSim = calculateSimilarity(cleanTitle || cleanArtist, track.name);
@@ -193,14 +214,18 @@ export async function searchTrackWithSmartPopularity(
         penalty += 0.5;
       }
 
-      const popularityScore = (track.popularity || 0) / 100;
-      const totalScore = (artistSim * 0.35 + titleSim * 0.35 + popularityScore * 0.30) - penalty;
+      // Sem popularidade, os 30% dela são redistribuídos igualmente entre artista
+      // e título — caso contrário toda faixa perderia 0.30 do score.
+      const totalScore = hasPopularity
+        ? artistSim * 0.35 + titleSim * 0.35 + ((track.popularity as number) / 100) * 0.3 - penalty
+        : artistSim * 0.5 + titleSim * 0.5 - penalty;
 
       return {
         track,
         artistSim,
         titleSim,
-        popularity: track.popularity || 0,
+        popularity: track.popularity,
+        ordemNativa: index,
         totalScore,
       };
     });
@@ -209,7 +234,12 @@ export async function searchTrackWithSmartPopularity(
       if (Math.abs(b.totalScore - a.totalScore) > 0.05) {
         return b.totalScore - a.totalScore;
       }
-      return b.popularity - a.popularity;
+      // Empate: popularidade quando existe, senão a ordem de relevância do
+      // próprio Spotify, que já aproxima "a versão mais ouvida".
+      if (hasPopularity) {
+        return (b.popularity as number) - (a.popularity as number);
+      }
+      return a.ordemNativa - b.ordemNativa;
     });
 
     const orderedTracks = scoredCandidates.map((c) => c.track);
@@ -219,13 +249,22 @@ export async function searchTrackWithSmartPopularity(
     let confidence: MatchConfidence = 'medium';
     let status: MatchStatus = 'matched';
 
+    // A exigência de popularidade só se aplica quando a API a fornece.
     const isHighMatch =
       topScored.artistSim >= 0.7 &&
       topScored.titleSim >= 0.6 &&
-      topScored.popularity >= 15;
+      (!hasPopularity || (topScored.popularity as number) >= 15);
 
     if (isHighMatch) {
-      if (secondScored && Math.abs(secondScored.totalScore - topScored.totalScore) < 0.03) {
+      // Um segundo colocado colado no primeiro só é ambiguidade real se for OUTRA
+      // música. Quando é a mesma faixa em outro lançamento (remaster, single,
+      // coletânea), o topo já é a versão mais ouvida — não há o que revisar.
+      const contested =
+        !!secondScored &&
+        Math.abs(secondScored.totalScore - topScored.totalScore) < 0.03 &&
+        !isSameRecording(topScored.track, secondScored.track);
+
+      if (contested) {
         status = 'ambiguous';
         confidence = 'medium';
       } else {

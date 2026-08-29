@@ -250,13 +250,15 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
                           <Disc size={20} />
                         </div>
                       )}
-                      <button
-                        className={`candidate-play-btn ${isPlaying ? 'playing' : ''}`}
-                        onClick={() => handleTogglePlay(cand)}
-                        title={cand.preview_url ? 'Ouvir prévia de 30s' : 'Abrir no Spotify'}
-                      >
-                        {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-                      </button>
+                      {cand.preview_url && (
+                        <button
+                          className={`candidate-play-btn ${isPlaying ? 'playing' : ''}`}
+                          onClick={() => handleTogglePlay(cand)}
+                          title="Ouvir prévia de 30s"
+                        >
+                          {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                        </button>
+                      )}
                     </div>
 
                     <div className="candidate-details">
@@ -279,23 +281,27 @@ export const TrackOptionModal: React.FC<TrackOptionModalProps> = ({
                         )}
                       </div>
 
-                      {/* Popularity metric */}
+                      {/* Popularidade: só exibida quando a API a fornece */}
                       <div className="candidate-popularity-bar-wrapper">
-                        <div className="popularity-indicator">
-                          <Flame
-                            size={14}
-                            className={`flame-icon ${
-                              cand.popularity > 60 ? 'hot' : cand.popularity > 30 ? 'warm' : 'low'
-                            }`}
-                          />
-                          <span className="popularity-text">Popularidade: {cand.popularity}%</span>
-                        </div>
-                        <div className="pop-bar-bg">
-                          <div
-                            className="pop-bar-fill"
-                            style={{ width: `${cand.popularity}%` }}
-                          />
-                        </div>
+                        {typeof cand.popularity === 'number' && (
+                          <>
+                            <div className="popularity-indicator">
+                              <Flame
+                                size={14}
+                                className={`flame-icon ${
+                                  cand.popularity > 60 ? 'hot' : cand.popularity > 30 ? 'warm' : 'low'
+                                }`}
+                              />
+                              <span className="popularity-text">Popularidade: {cand.popularity}%</span>
+                            </div>
+                            <div className="pop-bar-bg">
+                              <div
+                                className="pop-bar-fill"
+                                style={{ width: `${cand.popularity}%` }}
+                              />
+                            </div>
+                          </>
+                        )}
                         <span className="candidate-duration">{formatDuration(cand.duration_ms)}</span>
                       </div>
                     </div>

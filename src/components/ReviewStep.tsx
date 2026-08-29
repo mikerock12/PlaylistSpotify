@@ -233,13 +233,17 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                             <Disc size={18} />
                           </div>
                         )}
-                        <button
-                          className={`track-play-btn ${isPlaying ? 'playing' : ''}`}
-                          onClick={() => handleTogglePlay(track)}
-                          title={track.preview_url ? 'Ouvir prévia de 30s' : 'Abrir no Spotify'}
-                        >
-                          {isPlaying ? <Pause size={12} /> : <Play size={12} />}
-                        </button>
+                        {/* Sem preview_url não há o que tocar: o botão some e o
+                            link para o Spotify na linha continua disponível. */}
+                        {track.preview_url && (
+                          <button
+                            className={`track-play-btn ${isPlaying ? 'playing' : ''}`}
+                            onClick={() => handleTogglePlay(track)}
+                            title="Ouvir prévia de 30s"
+                          >
+                            {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+                          </button>
+                        )}
                       </div>
 
                       <div className="track-main-info">
@@ -262,22 +266,26 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                           )}
                         </div>
 
-                        {/* Popularity metric */}
+                        {/* Popularidade: só exibida quando a API a fornece */}
                         <div className="track-pop-info">
-                          <div className="pop-badge">
-                            <Flame
-                              size={12}
-                              className={`flame-icon ${
-                                track.popularity > 60
-                                  ? 'hot'
-                                  : track.popularity > 30
-                                  ? 'warm'
-                                  : 'low'
-                              }`}
-                            />
-                            <span>Versão mais ouvida ({track.popularity}% pop.)</span>
-                          </div>
-                          <span className="bullet-sep">•</span>
+                          {typeof track.popularity === 'number' && (
+                            <>
+                              <div className="pop-badge">
+                                <Flame
+                                  size={12}
+                                  className={`flame-icon ${
+                                    track.popularity > 60
+                                      ? 'hot'
+                                      : track.popularity > 30
+                                      ? 'warm'
+                                      : 'low'
+                                  }`}
+                                />
+                                <span>Versão mais ouvida ({track.popularity}% pop.)</span>
+                              </div>
+                              <span className="bullet-sep">•</span>
+                            </>
+                          )}
                           <span className="track-duration">{formatDuration(track.duration_ms)}</span>
                         </div>
                       </div>

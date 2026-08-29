@@ -26,9 +26,11 @@ export interface SpotifyTrack {
   id: string;
   name: string;
   uri: string;
-  popularity: number; // 0 to 100
+  // Opcionais: o Spotify omite estes campos para apps sem acesso estendido.
+  // Sempre verifique a presença antes de exibir ou pontuar.
+  popularity?: number; // 0 a 100
   duration_ms: number;
-  preview_url: string | null;
+  preview_url?: string | null;
   explicit: boolean;
   external_urls: { spotify: string };
   artists: SpotifyArtist[];

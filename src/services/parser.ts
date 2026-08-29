@@ -84,6 +84,30 @@ export function isIgnoredHeaderLine(line: string): boolean {
 }
 
 /**
+ * Frases que identificam com segurança o título de um show/vídeo, e não uma música.
+ * Ex: "MTV Unplugged in New York (Full Concert)", "LIVE HD (From The Basement 2012)"
+ */
+const SHOW_TITLE_STRONG =
+  /\b(?:full\s+(?:concert|album|show|set)|live\s+(?:at|in|from|hd|session)|ao\s+vivo|show\s+completo|grava(?:ç|c)(?:ã|a)o\s+ao\s+vivo|unplugged|from\s+the\s+basement|the\s+coda|official\s+(?:video|concert|live)|setlist)\b/i;
+
+/**
+ * Palavras que só indicam um show quando acompanhadas de contexto (ano, HD, "full").
+ * Sozinhas seriam ambíguas: "Oasis - Live Forever" é uma música, não um show.
+ */
+const SHOW_TITLE_WEAK = /\b(?:live|concert|concerto|tour|festival|acoustic|ac(?:ú|u)stico)\b/i;
+const SHOW_TITLE_CONTEXT = /\b(?:19|20)\d{2}\b|\bHD\b|\b4K\b|\bfull\b/i;
+
+/**
+ * Decide se o trecho após o separador descreve um show, e não o nome de uma música
+ */
+export function isShowTitleRemainder(remainder: string): boolean {
+  const s = remainder.trim();
+  if (!s) return false;
+  if (SHOW_TITLE_STRONG.test(s)) return true;
+  return SHOW_TITLE_WEAK.test(s) && SHOW_TITLE_CONTEXT.test(s);
+}
+
+/**
  * Detecta se há uma banda/artista global no cabeçalho ou rodapé do texto
  */
 export function detectGlobalArtist(rawLines: string[]): { detectedArtist: string | null; remainingLines: string[] } {
@@ -108,9 +132,10 @@ export function detectGlobalArtist(rawLines: string[]): { detectedArtist: string
 
     // Título de show/vídeo do YouTube na primeira linha:
     // ex: "Red Hot Chili Peppers - LIVE HD (From The Basement 2012)"
+    //     "Nirvana - MTV Unplugged in New York (Full Concert)"
     if (i === 0 && !detectedArtist) {
-      const showTitleMatch = line.match(/^([^-–—:]+)\s*[-–—:]\s*(?:LIVE|AO VIVO|SHOW|CONCERT|FULL ALBUM|FROM THE BASEMENT|TOUR|OFFICIAL|THE CODA).*/i);
-      if (showTitleMatch) {
+      const showTitleMatch = line.match(/^([^-–—:]+?)\s*[-–—:]\s*(.+)$/);
+      if (showTitleMatch && isShowTitleRemainder(showTitleMatch[2])) {
         detectedArtist = cleanString(showTitleMatch[1]);
         continue;
       }

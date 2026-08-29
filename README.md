@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Cole uma lista de músicas em texto — receba uma playlist oficial no seu Spotify.</strong><br>
-  Entende setlists do YouTube com minutagem, detecta a banda sozinho e escolhe a versão mais ouvida de cada faixa.
+  Entende setlists do YouTube com minutagem, detecta a banda sozinho e escolhe a melhor correspondência de cada faixa no catálogo oficial.
 </p>
 
 <p align="center">
@@ -40,10 +40,10 @@ O **Text to Spotify Playlist** faz esse trabalho. Você cola o texto cru, ele li
 | 🧹 **Limpeza automática de texto** | Remove minutagens (`0:47`, `17:57`, `1:15:30`, `[17:57]`, `(17:57)`), numeração de faixas (`01.`, `1 -`, `12)`), cabeçalhos (`Setlist:`, `Tracklist`), contagem de visualizações e links. |
 | 🎯 **Detecção automática de artista** | Reconhece a banda no título do vídeo (`Red Hot Chili Peppers - LIVE HD (...)`), em prefixos explícitos (`Banda:`, `Artista:`) ou quando o nome aparece isolado na primeira/última linha — e aplica em todas as faixas sem artista. |
 | 🔀 **Formatos flexíveis de linha** | Detecção automática, ou forçar `Artista - Música` / `Música - Artista`. Aceita hífen, travessão, dois-pontos, barra, pipe, vírgula e tabulação como separador. |
-| 🔥 **Busca por popularidade inteligente** | Ranqueia os candidatos combinando similaridade de artista (35%), similaridade de título (35%) e popularidade no Spotify (30%) — priorizando a versão que o público realmente ouve, não a primeira que aparece. |
+| 🔥 **Ranqueamento adaptativo** | Combina similaridade de artista e de título e, **quando a API fornece**, a popularidade da faixa. Sem esse dado, o peso é redistribuído e a ordem de relevância do próprio Spotify serve de desempate — veja [Limitações da API](#-limitações-da-api-do-spotify). |
 | 🚫 **Filtro anti-cover** | Penaliza resultados marcados como *tribute*, *karaoke*, *cover* e *instrumental version*, evitando as armadilhas clássicas da busca do Spotify. |
-| 🚦 **Classificação por confiança** | Cada faixa vira **Alta Confiança**, **Ambígua** ou **Não Encontrada**, com abas para filtrar e resolver só o que precisa de atenção. |
-| 🎧 **Prévia de áudio e troca de versão** | Toque o preview de 30s direto na revisão e, num clique, abra as 10 melhores alternativas para escolher outra gravação (ao vivo, remaster, single). |
+| 🚦 **Classificação por confiança** | Cada faixa vira **Alta Confiança**, **Ambígua** ou **Não Encontrada**, com abas para filtrar e resolver só o que precisa de atenção. Erros de digitação são recuperados: `Smells Like Ten Spirit` encontra *Smells Like Teen Spirit*. |
+| 🎧 **Troca de versão em um clique** | Abra as 10 melhores alternativas e escolha outra gravação (ao vivo, remaster, single). Se a API devolver `preview_url`, um player de 30s aparece na revisão. |
 | 📝 **Playlist sob medida** | Nome, descrição e visibilidade (pública/privada) definidos por você antes de enviar. |
 | 🔐 **OAuth 2.0 + PKCE** | Login direto no navegador contra o Spotify. Sem backend, sem *client secret*, sem senha passando por lugar nenhum. |
 
@@ -98,13 +98,37 @@ src/
 
 **Busca em cascata com fallbacks.** A consulta ao Spotify não é uma tentativa só: começa com a query estruturada (`artist:` + `track:`), degrada para busca livre, depois para o título limpo de sufixos (`(Live)`, `feat. ...`) e, por último, só o título. Cada nível só roda se o anterior não trouxe resultado.
 
-**Scoring determinístico e auditável.** O `totalScore` é uma fórmula explícita — `artistSim × 0.35 + titleSim × 0.35 + popularidade × 0.30 − penalidades` — sobre similaridade de Jaccard com normalização Unicode (acentos removidos, caixa unificada). Empates dentro de 0,05 são desempatados por popularidade, e diferenças menores que 0,03 entre 1º e 2º lugar marcam a faixa como **ambígua** em vez de escolher no escuro.
+**Scoring determinístico e auditável.** O `totalScore` é uma fórmula explícita sobre similaridade de Jaccard com normalização Unicode (acentos removidos, caixa unificada):
+
+- **Com popularidade:** `artistSim × 0.35 + titleSim × 0.35 + popularidade × 0.30 − penalidades`
+- **Sem popularidade:** `artistSim × 0.50 + titleSim × 0.50 − penalidades`
+
+Empates dentro de 0,05 são desempatados pela popularidade quando existe, e pela ordem nativa do Spotify quando não. Um segundo colocado colado no primeiro só marca a faixa como **ambígua** se for outra gravação — a mesma música em outro lançamento (remaster, single, coletânea) não é ambiguidade, e `isSameRecording()` faz essa distinção comparando título sem sufixos e artista.
+
+**Degradação explícita, nunca silenciosa.** Campos que a API pode omitir são tratados como ausentes, não como zero. `popularity` faltando redistribui o peso em vez de zerar o score de todos os candidatos; `preview_url` faltando remove o botão de play em vez de deixar um controle que não toca nada. A interface só afirma o que os dados sustentam.
 
 **Resiliência de sessão.** Token renovado automaticamente via `refresh_token`; um `401` no meio de um lote dispara o refresh e refaz a requisição. A troca do `authorization_code` é protegida contra corrida por uma promise única, evitando o erro de código reutilizado no retorno do OAuth.
 
 **Busca em lote com concorrência limitada.** As faixas são processadas em blocos de 3 requisições paralelas, com barra de progresso — rápido o bastante sem provocar rate limit da API.
 
 **TypeScript estrito.** Todas as respostas da API têm tipo declarado em `types/spotify.ts`. Lint com **Oxlint** (Rust) e build com **Vite 8** + **React 19**.
+
+---
+
+## ⚠️ Limitações da API do Spotify
+
+Apps sem acesso estendido recebem uma resposta reduzida da Web API. Verificado em **29/08/2026** com credenciais em Development Mode:
+
+| Recurso | Situação |
+|---|---|
+| `popularity` na busca e em `/v1/tracks/{id}` | campo **ausente** |
+| `preview_url` (prévia de 30s) | campo **ausente** |
+| `GET /v1/tracks?ids=` (lote) | **403 Forbidden** |
+| `GET /v1/tracks/{id}`, `/v1/artists/{id}`, `/v1/me`, busca, criação de playlist | **200 OK** |
+
+O app detecta isso em tempo de execução e se adapta: o ranking passa a se apoiar em similaridade mais a ordem de relevância do Spotify, que na prática já aproxima a versão mais ouvida. Os elementos de interface que dependem dos campos ausentes simplesmente não são renderizados.
+
+Se o seu app tiver **acesso estendido** aprovado pelo Spotify, os campos voltam e o ranking por popularidade entra em ação sozinho, sem mudança de código.
 
 ---
 
